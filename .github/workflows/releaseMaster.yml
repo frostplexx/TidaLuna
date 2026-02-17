@@ -14,7 +14,7 @@ jobs:
  Release:
   name: Release latest on GitHub
   needs: Build
-  runs-on: ubuntu-latest
+  runs-on: macos-latest
 
   steps:
    - name: Download All Artifacts
