@@ -27,8 +27,8 @@ stdenv.mkDerivation (rec {
     inherit pname src version;
     fetcherVersion = 1;
     hash = if stdenv.isDarwin 
-                then "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" 
-                else "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+                then "sha256-Oj34rQbKbsHnqPdVv+ti8z+gZTT+VOsDxg/MQ22sLRQ=" 
+                else "sha256-Oj34rQbKbsHnqPdVv+ti8z+gZTT+VOsDxg/MQ22sLRQ=";
   };
 
   buildPhase = ''
