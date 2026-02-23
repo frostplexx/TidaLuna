@@ -5,7 +5,8 @@
   fetchurl,
   tidal-hifi ? null,
 }: let
-  injection = callPackage ./injection.nix {};
+  pkg = callPackage ./injection.nix {};
+
 
   # Only fetch the DMG for darwin builds
   tidalDmg =
@@ -21,7 +22,7 @@ in
   then
     import ./darwin-tidal.nix {
       prev = {inherit lib stdenv;};
-      inherit injection tidalDmg;
+      inherit  tidalDmg;injection = pkg;
     }
   else
     tidal-hifi.overrideAttrs rec {
@@ -29,6 +30,6 @@ in
         mv $out/share/tidal-hifi/resources/app.asar $out/share/tidal-hifi/resources/original.asar
 
         mkdir -p "$out/share/tidal-hifi/resources/app/"
-        cp -R ${injection}/* $out/share/tidal-hifi/resources/app/
+        cp -R ${pkg}/* $out/share/tidal-hifi/resources/app/
       '';
     }
