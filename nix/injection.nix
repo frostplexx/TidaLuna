@@ -16,7 +16,7 @@ let
   nixOSDepsRaw = fetchPnpmDeps {
     inherit src version name pname;
     fetcherVersion = 1;
-    hash = "sha256-Oj34rQbKbsHnqPdVv+ti8z+gZTT+VOsDxg/MQ22sLRQ=";
+    hash = "sha256-NFzH7nQYfJcZs23btmhGzmhEuvJVIVr0iirWgJjiszg=";
   };
 
   darwinDepsRaw = fetchPnpmDeps {
