@@ -33,16 +33,25 @@ const resolveCjsModule = (pathPattern: RegExp, validator: (r: any) => boolean) =
 };
 
 // Expose react
-const react = resolveCjsModule(/\/react-(?!dom[-.])[^/]+\.js$/, (r) => typeof r.useState === "function" && typeof r.useEffect === "function");
-if (react) { react.default ??= react; modules["react"] = react; }
-else { coreTrace.warn("modules", "Failed to resolve React module"); }
+export const resolveReact = () => {
+	const react = resolveCjsModule(
+		/\/react-(?!dom[-.])[^/]+\.js$/,
+		(r) => typeof r.useState === "function" && typeof r.useEffect === "function"
+	);
+	if (react) { react.default ??= react; modules["react"] = react; }
 
-const jsxRT = resolveCjsModule(/\/jsx-runtime-[^/]+\.js$/, (r) => typeof r.jsx === "function" && typeof r.jsxs === "function");
-if (jsxRT) { jsxRT.default ??= jsxRT; modules["react/jsx-runtime"] = jsxRT; }
-else { coreTrace.warn("modules", "Failed to resolve react/jsx-runtime module"); }
+	const jsxRT = resolveCjsModule(
+		/\/jsx-runtime-[^/]+\.js$/,
+		(r) => typeof r.jsx === "function" && typeof r.jsxs === "function"
+	);
+	if (jsxRT) { jsxRT.default ??= jsxRT; modules["react/jsx-runtime"] = jsxRT; }
 
-const reactDom = resolveCjsModule(/\/react-dom-[^/]+\.js$/, (r) => typeof r.createRoot === "function" && typeof r.hydrateRoot === "function");
-if (reactDom) { reactDom.default ??= reactDom; modules["react-dom/client"] = reactDom; }
-else { coreTrace.warn("modules", "Failed to resolve react-dom/client module"); }
+	const reactDom = resolveCjsModule(
+		/\/react-dom-[^/]+\.js$/,
+		(r) => typeof r.createRoot === "function" && typeof r.hydrateRoot === "function"
+	);
+	if (reactDom) { reactDom.default ??= reactDom; modules["react-dom/client"] = reactDom; }
+};
 
+resolveReact();
 modules["oby"] = await import("oby");
