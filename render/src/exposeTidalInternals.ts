@@ -10,6 +10,8 @@ import { getOrCreateLoadingContainer } from "./loadingContainer";
 
 export const tidalModules: Record<string, object> = {};
 
+const quartzStart = performance.now();
+
 // Store pending promises to avoid race conditions with circular imports
 const pendingModules: Record<string, Promise<object>> = {};
 
@@ -169,3 +171,5 @@ if (loadingEl) {
     loadingEl.style.opacity = "0";
     setTimeout(() => loadingEl.remove(), 500);
 }
+
+console.log(`%c[Luna] Quartz phase: ${(performance.now() - quartzStart).toFixed(0)}ms`, "color: #31d8ff; font-weight: bold;");
