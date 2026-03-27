@@ -20,29 +20,51 @@ import "./window.core";
 import { LunaPlugin } from "./LunaPlugin";
 import { applySeedSettings } from "./helpers/applySeedSettingsJSOn";
 
+type TimingEntry = { label: string; duration: number };
+const timings: TimingEntry[] = [];
+
+const timed = async (label: string, fn: () => Promise<void>) => {
+	const start = performance.now();
+	await fn();
+	const duration = performance.now() - start;
+	timings.push({ label, duration });
+};
+
+const printTimings = () => {
+	const total = timings.reduce((sum, t) => sum + t.duration, 0);
+	const sorted = [...timings].sort((a, b) => b.duration - a.duration);
+
+	console.group(`%c[Luna] Startup complete in ${total.toFixed(0)}ms`, "color: #31d8ff; font-weight: bold;");
+	console.log("%cBreakdown (slowest first):", "color: #a7a7a9;");
+	for (const { label, duration } of sorted) {
+		const pct = ((duration / total) * 100).toFixed(1);
+		const bar = "█".repeat(Math.round(Number(pct) / 5));
+		const color = duration > 1000 ? "color: red;" : duration > 500 ? "color: orange;" : "color: green;";
+		console.log(`%c${bar} ${label}: ${duration.toFixed(0)}ms (${pct}%)`, color);
+	}
+	console.groupEnd();
+};
+
 // Wrap loading of plugins in a timeout so native/preload.ts can populate modules with @luna/core (see native/preload.ts)
 setTimeout(async () => {
-	// Load lib
-	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib.native" });
-	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib" });
+	const totalStart = performance.now();
 
-	// Load Linux-specific plugins
+	await timed("lib.native", () => LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib.native" }));
+	await timed("lib", () => LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib" }));
+
 	if (__platform === "linux") {
-		await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.linux" });
+		await timed("linux", () => LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.linux" }));
 	}
 
-	// Load ui after lib as it depends on it.
-	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.ui" });
+	await timed("ui", () => LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.ui" }));
+	await timed("dev", () => LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.dev" }));
+	await timed("applySeedSettings", () => applySeedSettings());
+	await timed("prefetchAll", () => LunaPlugin.pluginStorage.prefetchAll());
 
-	// Load dev after ui as it depends on both
-	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.dev" });
+	// Time each user plugin individually
+	const keys = await LunaPlugin.pluginStorage.keys();
+	await timed("loadStoredPlugins (total)", () => LunaPlugin.loadStoredPlugins());
 
-	// Apply declarative seed settings (e.g. from Nix) before loading user plugins
-	await applySeedSettings();
-
-	// Warm IDB cache so loadStoredPlugins hits no cold reads
-	await LunaPlugin.pluginStorage.prefetchAll();
-
-	// Only AFTER all core plugins are ready, load user plugins
-	await LunaPlugin.loadStoredPlugins();
+	printTimings();
+	console.log(`%c[Luna] Total wall time: ${(performance.now() - totalStart).toFixed(0)}ms`, "color: #31d8ff;");
 });
