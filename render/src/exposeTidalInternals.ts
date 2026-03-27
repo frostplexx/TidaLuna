@@ -30,8 +30,12 @@ const fetchCodeCached = async (path: string): Promise<string> => {
 	const etag = headRes.headers.get("etag") ?? headRes.headers.get("last-modified");
 
 	const cached = await idbGet<{ etag: string; code: string }>(path, quartzCache);
-	if (cached?.etag === etag && etag !== null) return cached.code;
+	if (cached?.etag === etag && etag !== null) {
+		console.log(`%c[Luna] Cache hit: ${path}`, "color: green;");
+		return cached.code;
+	}
 
+	console.log(`%c[Luna] Cache miss: ${path}`, "color: orange;");
 	const fullRes = await fetch(path);
 	const code = `${await fullRes.text()}\n//# sourceURL=${path}`;
 
