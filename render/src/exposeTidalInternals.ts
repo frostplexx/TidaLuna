@@ -25,6 +25,18 @@ const messageContainer = getOrCreateLoadingContainer().messageContainer;
 const dynamicResolve: QuartzPlugin["dynamicResolve"] = async ({ name, moduleId, config }) => {
     const path = resolveAbsolutePath(moduleId, name);
 
+
+	// Skip non-JS files entirely
+	if (!path.endsWith(".js") && !path.endsWith(".mjs") && !path.endsWith(".ts")) {
+		return {};
+	}
+
+
+	// Skip asset chunks that aren't real modules (images, fonts, css etc embedded in js)
+	if (/\/assets\/[^/]+-[a-zA-Z0-9]{8,}\.(css|png|jpg|jpeg|svg|woff2?|ttf|eot)/.test(path)) {
+		return {};
+	}
+
     // Return cached module if available
     if (tidalModules[path]) return tidalModules[path];
 
