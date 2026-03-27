@@ -13,10 +13,16 @@ export const getOrCreateLoadingContainer = () => {
 		transition: "opacity 1s ease-out",
 	};
 
-	const messageStyles: Partial<CSSStyleDeclaration> = {
-		position: "absolute",
-		top: "100%",
-	};
+    const messageStyles: Partial<CSSStyleDeclaration> = {
+    	position: "absolute",
+    	top: "100%",
+    	maxHeight: "40vh",
+    	overflowY: "auto",
+    	width: "400px",
+    	textAlign: "left",
+    	fontSize: "12px",
+    	opacity: "0.7",
+    };
 
 	let loadingContainer = document.getElementById("tidaluna-loading") as HTMLDivElement | null;
 	let messageContainer: HTMLDivElement;
