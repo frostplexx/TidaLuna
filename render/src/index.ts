@@ -34,12 +34,9 @@ setTimeout(async () => {
 	// Load ui after lib as it depends on it.
 	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.ui" });
 
-	// Apply declarative seed settings (e.g. from Nix) before loading user plugins
-	await applySeedSettings();
-
-	// Load all plugins from storage
-	await LunaPlugin.loadStoredPlugins();
-
-	// Load other api's
-	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.dev" });
+    await Promise.all([
+        applySeedSettings(),
+        LunaPlugin.loadStoredPlugins(),
+        LunaPlugin.fromStorage({ url: "https://luna/luna.dev" }),
+    ]);
 });
