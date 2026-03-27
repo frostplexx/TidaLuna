@@ -38,7 +38,7 @@ class ContextMenuButton {
 
 	public async show(contextMenu: Element | null) {
 		if (!!contextMenu) {
-			const templateButton = contextMenu.querySelector(`div[data-type="contextmenu-item"]`) as Element | undefined;
+			const templateButton = contextMenu.querySelector(`div[role="menuitem"]`) as Element | undefined;
 			const makeButton = () => {
 				if (templateButton === undefined) throw new Error("No buttons to clone off contextMenu found!");
 				const newButton = templateButton.cloneNode(true) as Element;
@@ -80,7 +80,7 @@ export class ContextMenu {
 	 * Will return null if the element is not found (usually means no context menu is open)
 	 */
 	public static async getCurrent() {
-		return await observePromise<Element>(unloads, `[data-type="list-container__context-menu"]`, 1000);
+		return await observePromise<Element>(unloads, `[data-prevent-feed-close]`, 1000);
 	}
 
 	/**

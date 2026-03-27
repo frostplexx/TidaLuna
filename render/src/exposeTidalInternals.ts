@@ -74,7 +74,7 @@ const dynamicResolve: QuartzPlugin["dynamicResolve"] = async ({ name, moduleId, 
 
     // Create and store the promise BEFORE starting the async work
     const loadPromise = (async () => {
-        const { code: rawCode, etag } = await fetchCodeCached(path);
+        const rawCode = await fetchCodeCached(path);
 
         // Guard against undefined code
         if (!rawCode) {

@@ -122,22 +122,25 @@ const httpsHandler = async (req: Request): Promise<Response> => {
         if (await hasPatchedAsset(reqUrl.pathname, etag)) {
             // Serve from disk — skip quartz entirely
             const cached = await getPatchedAsset(reqUrl.pathname);
-            if (cached) {
+            if (cached?.length) {
                 console.log(`[Luna] Serving pre-patched: ${reqUrl.pathname}`);
-                return new Response(cached, {
-                    headers: { "Content-Type": "application/javascript" },
-                });
+                const headers: Record<string, string> = { "Content-Type": "application/javascript" };
+                if (etag) headers["etag"] = etag;
+                return new Response(cached, { headers });
             }
         }
 
         // Cache miss — fetch, patch and save
+        // Use a clean request without conditional headers (If-None-Match etc.) to ensure
+        // we always get the full response body (not a 304 No Content).
         console.log(`[Luna] Patching and caching: ${reqUrl.pathname}`);
-        const res = await electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
+        const cleanReq = new Request(req.url, { headers: { "Accept": "text/javascript" } });
+        const res = await electron.net.fetch(cleanReq, { bypassCustomProtocolHandlers: true });
         const code = await res.text();
         const patched = await patchAndSaveAsset(reqUrl.pathname, code, etag);
-        return new Response(patched, {
-            headers: { "Content-Type": "application/javascript" },
-        });
+        const patchHeaders: Record<string, string> = { "Content-Type": "application/javascript" };
+        if (etag) patchHeaders["etag"] = etag;
+        return new Response(patched, { headers: patchHeaders });
     }
 
     if (tidalMainHosts.has(reqUrl.hostname) && !path.extname(reqUrl.pathname)) {
