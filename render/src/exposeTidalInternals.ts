@@ -32,6 +32,7 @@ const dynamicResolve: QuartzPlugin["dynamicResolve"] = async ({ name, moduleId, 
     if (path in pendingModules) return pendingModules[path];
 
     messageContainer.innerText += `Loading ${path}\n`;
+    messageContainer.scrollTop = messageContainer.scrollHeight;
     loading++;
 
     // Create and store the promise BEFORE starting the async work
@@ -151,6 +152,7 @@ for (const script of scripts) {
 const loadingEl = document.getElementById("tidaluna-loading");
 if (loadingEl) {
     messageContainer.innerText += "Done!\n";
+    messageContainer.scrollTop = messageContainer.scrollHeight;
     loadingEl.style.transition = "opacity 0.5s ease-out";
     loadingEl.style.opacity = "0";
     setTimeout(() => loadingEl.remove(), 500);
