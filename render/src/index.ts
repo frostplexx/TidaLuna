@@ -34,10 +34,15 @@ setTimeout(async () => {
 	// Load ui after lib as it depends on it.
 	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.ui" });
 
-    await Promise.all([
-        // applySeedSettings(),
-        LunaPlugin.pluginStorage.prefetchAll(),
-        LunaPlugin.loadStoredPlugins(),
-        LunaPlugin.fromStorage({ url: "https://luna/luna.dev" }),
-    ]);
+	// Load dev after ui as it depends on both
+	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.dev" });
+
+	// Apply declarative seed settings (e.g. from Nix) before loading user plugins
+	await applySeedSettings();
+
+	// Warm IDB cache so loadStoredPlugins hits no cold reads
+	await LunaPlugin.pluginStorage.prefetchAll();
+
+	// Only AFTER all core plugins are ready, load user plugins
+	await LunaPlugin.loadStoredPlugins();
 });
