@@ -36,6 +36,7 @@ setTimeout(async () => {
 
     await Promise.all([
         applySeedSettings(),
+        LunaPlugin.pluginStorage.prefetchAll(),
         LunaPlugin.loadStoredPlugins(),
         LunaPlugin.fromStorage({ url: "https://luna/luna.dev" }),
     ]);

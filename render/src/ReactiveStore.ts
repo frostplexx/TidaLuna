@@ -54,6 +54,11 @@ export class ReactiveStore {
 		return value;
 	}
 
+    public async prefetchAll(): Promise<void> {
+        const keys = await this.keys();
+        await Promise.all(keys.map(k => this.getReactive(k)));
+    }
+
 	public get<T>(key: string): Promise<T | undefined> {
 		return idbGet<T>(key, this.idbStore);
 	}
