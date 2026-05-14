@@ -13,7 +13,7 @@
 		"sanitize-filename": "^1.6.3"
 	},
 	"devDependencies": {
-		"musicbrainz-api": "^0.25.1",
+		"musicbrainz-api": "^0.27.0",
 		"neptune-types": "^1.0.1",
 		"oby": "^15.1.2",
 		"redux": "^5.0.1"
