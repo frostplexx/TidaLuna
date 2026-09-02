@@ -58,7 +58,7 @@ jobs:
       NIXPKGS_REV=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
       nix shell "github:NixOS/nixpkgs/${NIXPKGS_REV}#nix-update" --command nix-update --flake injection-linux --version=${{ env.VERSION }}
 
-   - uses: stefanzweifel/git-auto-commit-action@v5
+   - uses: stefanzweifel/git-auto-commit-action@v7
      with:
       commit_message: "nix: update Linux injection hash for ${{ env.VERSION }}"
 
@@ -90,6 +90,6 @@ jobs:
       nix shell "github:NixOS/nixpkgs/${NIXPKGS_REV}#nix-update" --command nix-update --flake injection-darwin --version=${{ env.VERSION }}
       nix shell "github:NixOS/nixpkgs/${NIXPKGS_REV}#nix-update" --command nix-update --flake darwin-package --version=skip
 
-   - uses: stefanzweifel/git-auto-commit-action@v5
+   - uses: stefanzweifel/git-auto-commit-action@v7
      with:
       commit_message: "nix: update Darwin injection and package hashes for ${{ env.VERSION }}"
