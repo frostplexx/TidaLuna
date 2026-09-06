@@ -137,6 +137,13 @@ wrap_resource_request_handler! {
                     inject_refresh_token(req, &url);
                 }
 
+                // Asked per request rather than per response: the artwork strip
+                // reads plaintext, and compression has to be refused while the
+                // mime type that gates the strip itself is still unknown.
+                if crate::ui::artwork_filter::serves_artworks(&url) {
+                    force_identity_encoding(req);
+                }
+
                 if should_rewrite_token(&url) {
                     rewrite_authorization_header(req);
                 }
@@ -148,8 +155,8 @@ wrap_resource_request_handler! {
             &self,
             _browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
-            _request: Option<&mut Request>,
-            _response: Option<&mut Response>,
+            request: Option<&mut Request>,
+            response: Option<&mut Response>,
         ) -> Option<ResponseFilter> {
             if self.token_exchange.load(Ordering::Acquire) {
                 let exchange_cid = self
@@ -158,7 +165,7 @@ wrap_resource_request_handler! {
                     .unwrap_or_else(|e| e.into_inner())
                     .clone();
                 let exchange_epoch = self.exchange_epoch.load(Ordering::Acquire);
-                Some(new_buffering_filter(
+                return Some(new_buffering_filter(
                     0,
                     Arc::new(move |body| {
                         match process_token_response(
@@ -171,10 +178,34 @@ wrap_resource_request_handler! {
                             ProcessResult::Error => FilterOutcome::Drop,
                         }
                     }),
-                ))
-            } else {
-                None
+                ));
             }
+
+            let mime = response
+                .as_ref()
+                .map(|r| userfree_to_string(&r.mime_type()))
+                .unwrap_or_default();
+            let url = RequestUrl::new(
+                request
+                    .as_ref()
+                    .map(|r| userfree_to_string(&r.url()))
+                    .unwrap_or_default(),
+            );
+            if !crate::ui::artwork_filter::should_strip(&url, &mime) {
+                return None;
+            }
+            // An album document is kilobytes; a paged collection carrying its
+            // artworks runs larger, and the buffer grows from here either way.
+            Some(new_buffering_filter(
+                64 * 1024,
+                Arc::new(|body| {
+                    use crate::ui::artwork_filter::StripResult;
+                    match crate::ui::artwork_filter::strip_video_artwork(&body) {
+                        StripResult::Rewritten(stripped) => FilterOutcome::Emit(stripped),
+                        StripResult::Unchanged => FilterOutcome::Emit(body),
+                    }
+                }),
+            ))
         }
     }
 }
