@@ -199,6 +199,18 @@ async fn handle_proxy_head(query_id: i64, url: crate::ui::nav::RequestUrl) {
 /// A response body as it came off the wire. An upstream error page can reflect a real OAuth
 /// token back at us, hence no accessor for the raw string: `scrubbed_for_log` and
 /// `into_reply` are the only exits and both run the token scrub.
+/// The mime lives in the upstream headers here rather than on a CEF response. The reading
+/// is the handler's; the rule it feeds is the one the response filter uses.
+fn strips_artwork(
+    url: &crate::ui::nav::RequestUrl,
+    headers: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    headers
+        .get("content-type")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|mime| crate::ui::artwork_filter::should_strip(url, mime))
+}
+
 struct UpstreamBody(String);
 
 impl UpstreamBody {
@@ -227,6 +239,25 @@ impl UpstreamBody {
     /// rewrites the token fields themselves. Its output is re-wrapped, keeping egress gated.
     fn transform_token_body(self, status: u16, session_epoch: u64) -> Self {
         Self(proxy_transform_token_body(&self.0, status, session_epoch))
+    }
+
+    /// The artwork rewrite runs here as well as on the CEF response filter, because a reply
+    /// this path answers never reaches that filter: `proxy.fetch` drives reqwest itself, and
+    /// there is no CEF response to attach one to. Both sites call the same rule; leaving it
+    /// to the filter alone would hand back the video cover our renderer cannot decode
+    /// whenever the renderer's own fetch failed and fell back here.
+    fn strip_video_artwork(self) -> Self {
+        match crate::ui::artwork_filter::strip_video_artwork(self.0.as_bytes()) {
+            // `serde_json` emits UTF-8; keeping the original on the impossible branch is
+            // still better than handing back a lossy rewrite of a body we own.
+            crate::ui::artwork_filter::StripResult::Rewritten(bytes) => {
+                match String::from_utf8(bytes) {
+                    Ok(stripped) => Self(stripped),
+                    Err(_) => self,
+                }
+            }
+            crate::ui::artwork_filter::StripResult::Unchanged => self,
+        }
     }
 
     /// Serializes the whole reply and scrubs it as one string. Headers can carry a token
@@ -414,8 +445,13 @@ async fn handle_proxy_fetch(query_id: i64, url: crate::ui::nav::RequestUrl, opts
                     body.scrubbed_for_log(400)
                 );
             }
+            // Read before `headers_map` is handed to the reply, and settled as a bool so the
+            // borrow ends here rather than straddling that move.
+            let strip_artwork = strips_artwork(&url, &headers_map);
             let body = if is_token_endpoint {
                 body.transform_token_body(status, session_epoch)
+            } else if strip_artwork {
+                body.strip_video_artwork()
             } else {
                 body
             };
