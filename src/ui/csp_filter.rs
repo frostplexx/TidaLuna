@@ -34,7 +34,7 @@ wrap_request_context_handler! {
                     .map(|r| userfree_to_string(&r.url()))
                     .unwrap_or_default(),
             );
-            if is_document_url(&url) {
+            if is_document_url(&url, None) {
                 return Some(DocumentHandler::new());
             }
             // SW precache of a chunk we rewrite: do it here too (browser-less), so
@@ -104,14 +104,23 @@ wrap_resource_request_handler! {
     }
 }
 
-// Only the shell HTML (root nav or *.html on the app host) is stripped; assets
-// stay untouched and keep their compression.
-pub(crate) fn is_document_url(url: &RequestUrl) -> bool {
+// Only the shell HTML is stripped; assets stay untouched and keep their compression.
+//
+// `resource_type` is what CEF says about the request, for the callers that have a
+// request to ask. It names a top-level load whatever the path, and that is the half
+// the path test cannot see. TIDAL's routes carry no extension, and a cold start on
+// `/album/1` is a document that `/` and `*.html` both miss. The path test stays for
+// the service-worker precache, which arrives with no browser and no type worth
+// trusting, and for any caller that cannot name one.
+pub(crate) fn is_document_url(url: &RequestUrl, resource_type: Option<ResourceType>) -> bool {
     let Some(parsed) = url.parsed() else {
         return false;
     };
     if parsed.host_str() != Some(crate::ui::nav::HOST_DESKTOP) {
         return false;
+    }
+    if resource_type == Some(ResourceType::MAIN_FRAME) {
+        return true;
     }
     let path = parsed.path();
     path == "/" || path.ends_with(".html")

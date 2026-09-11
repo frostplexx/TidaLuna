@@ -775,7 +775,10 @@ wrap_request_handler! {
             // Strip the CSP meta on the doc navigation (first load, no SW yet);
             // the browser handler wins over the context one; peel it off here.
             // TokenResourceHandler is a no-op on the doc GET: nothing is lost.
-            if crate::ui::csp_filter::is_document_url(&url) {
+            if crate::ui::csp_filter::is_document_url(
+                &url,
+                _request.as_ref().map(|r| r.resource_type()),
+            ) {
                 return Some(crate::ui::csp_filter::DocumentHandler::new());
             }
 
