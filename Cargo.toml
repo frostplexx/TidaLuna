@@ -21,10 +21,11 @@ tar = "0.4.46"
 # https://github.com/crate-ci/typos/blob/master/docs/reference.md
 [workspace.metadata.typos.default]
 extend-ignore-identifiers-re = [
-  "Messager", # intentional toast-system identifier
-  "DOUT_DIR", # CMake -D define for OUT_DIR
-  "Cpy",      # NSIS installer macro
-  "DELETEd",  # SQL DELETE, past tense, in a doc comment
+  "Messager",       # intentional toast-system identifier
+  "DOUT_DIR",       # CMake -D define for OUT_DIR
+  "Cpy",            # NSIS installer macro
+  "DELETEd",        # SQL DELETE, past tense, in a doc comment
+  "msg_controllen", # glibc `msghdr` field: the control buffer's length
 ]
 
 [workspace.metadata.typos.default.extend-words]
@@ -84,6 +85,9 @@ getrandom = { workspace = true }
 oauth2 = { version = "5.0.0", default-features = false }
 oxc = { version = "0.147.0", features = ["semantic", "transformer", "codegen"] }
 pbkdf2 = "0.13.0"
+# Already in the graph through `url`; named here to decode a path segment before
+# it is matched against the deep-link allowlist.
+percent-encoding = "2.3.2"
 png = "0.18.1"
 reqwest = { workspace = true, features = [
   "stream",
@@ -161,8 +165,11 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_Console",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
   "Win32_System_Registry",
   "Win32_System_Threading",
   "Win32_UI_Shell",
@@ -177,10 +184,23 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "NSResponder",
   "std",
 ] }
+# Already in the graph through objc2-app-kit; named here for the Apple Event a
+# `tidal://` click arrives as. The typed bindings for the two Carbon-keyword
+# methods sit behind objc2-core-services, which stays out of the tree: those two
+# are sent by hand instead.
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+  "NSAppleEventDescriptor",
+  "NSAppleEventManager",
+  "NSString",
+  "std",
+] }
 security-framework = "3.7.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 flate2 = { workspace = true }
+# Already resolved through the graph; named here for the `SCM_CREDENTIALS` call
+# that tells who sent a datagram, which `std` still gates behind nightly.
+libc = "0.2.189"
 tar = { workspace = true }
 tray-item = { version = "0.10.0", default-features = false, features = [
   "ksni",

@@ -443,6 +443,16 @@ Section "Uninstall"
 
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\TidaLunar"
 
+  ; The app claims tidal:// at runtime, so the key outlives the files it points at
+  ; unless removal is explicit -- but another TIDAL client writes this same HKCU
+  ; key, and a command that is not the one we write means the scheme changed hands
+  ; since our last launch. The comparison fails toward leaving it: a stale key of
+  ; ours costs one click, another app's registration costs it the feature.
+  ReadRegStr $0 HKCU "Software\Classes\tidal\shell\open\command" ""
+  ${If} $0 == '"$INSTDIR\tidalunar.exe" "%1"'
+    DeleteRegKey HKCU "Software\Classes\tidal"
+  ${EndIf}
+
   ${If} $RemoveUserData == 1
     RMDir /r "$LOCALAPPDATA\tidalunar"
   ${EndIf}

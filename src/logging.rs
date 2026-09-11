@@ -86,8 +86,17 @@ fn ensure_file_sink() {
 /// into the archive while `console.log` no longer existed. Neither of those two
 /// ever holds the lock. A subprocess returns from `execute_process` and a
 /// duplicate from the guard, both before it is taken.
+///
+/// Nothing may open the sink before this runs, an open sink being exactly what
+/// makes the rotation stand down. A filled slot is therefore a caller out of
+/// order and never a runtime condition, which is why startup keeps its verdicts
+/// until here, `AppLock::report_link_channel` among them.
 pub(crate) fn adopt_session_log(_lock: &crate::platform::app_lock::AppLock) {
     let mut guard = FILE_SINK.lock().unwrap_or_else(|e| e.into_inner());
+    debug_assert!(
+        guard.is_none(),
+        "a diagnostic opened the log before the session could rotate it"
+    );
     adopt_leftover(&crate::state::cache_data_dir(), &mut guard);
 }
 

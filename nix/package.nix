@@ -141,7 +141,9 @@ stdenv.mkDerivation {
     (makeDesktopItem {
       name = "tidalunar";
       desktopName = "TidaLunar";
-      exec = "tidalunar";
+      # %u carries a clicked tidal:// link through to the binary; without it the
+      # scheme association resolves and then launches the app with no argument.
+      exec = "tidalunar %u";
       icon = "tidalunar";
       comment = "A TIDAL client";
       categories = [
@@ -149,6 +151,7 @@ stdenv.mkDerivation {
         "Audio"
         "Player"
       ];
+      mimeTypes = [ "x-scheme-handler/tidal" ];
     })
   ];
 

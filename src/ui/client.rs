@@ -423,6 +423,10 @@ wrap_life_span_handler! {
                     with_state(|state| {
                         state.browser = Some(browser);
                     });
+                    // A deep link that arrived while this was being built waits
+                    // for exactly this moment; nothing later would drain it.
+                    // After the store, which is where the frame is looked up.
+                    crate::ui::deep_link::apply_pending();
                 }
             }
         }

@@ -482,7 +482,13 @@ document.title = "TidaLunar - A TIDAL client";
                 background_color: 0xFF111111,
                 ..Default::default()
             };
-            let url = CefString::from(format!("https://{}/", crate::ui::nav::HOST_DESKTOP).as_str());
+            // A launch that carried a deep link opens on it; the window is built
+            // once, and seeding the first navigation beats loading the home page
+            // and replacing it a moment later.
+            let start = crate::ui::deep_link::take_pending()
+                .map(|target| target.to_string())
+                .unwrap_or_else(|| format!("https://{}/", crate::ui::nav::HOST_DESKTOP));
+            let url = CefString::from(start.as_str());
 
             let mut client_ref = self.default_client();
             let mut bv_delegate = TidalBrowserViewDelegate::new(0);
