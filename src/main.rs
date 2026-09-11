@@ -216,7 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Single-instance guard, before any DB/SDK/Connect/CEF work: a duplicate would
     // otherwise race (and could purge) the running instance's SDK store. It signals
     // the running window to focus, then exits.
-    let _app_lock = match platform::app_lock::acquire_or_signal() {
+    let app_lock = match platform::app_lock::acquire_or_signal() {
         Some(lock) => lock,
         None => return Ok(()),
     };
@@ -226,12 +226,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     platform::desktop_entry::install();
 
-    // Open the sink early (and rotate last session's log) to capture early
-    // lines; safe before DB init since cache_data_dir() is env-only.
-    crate::logging::rotate_console_log(&crate::state::cache_data_dir());
-    if crate::logging::log_level() >= 1 {
-        crate::logging::ensure_file_sink();
-    }
+    // Owning the lock is what makes rotating the shared log ours to do, and this
+    // is the first point where that is known. Before the level is applied below,
+    // since applying it opens the sink.
+    crate::logging::adopt_session_log(&app_lock);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

@@ -58,7 +58,7 @@ pub(crate) fn set_log_level(requested: u8) {
 }
 
 /// Open `<data_dir>/console.log` for append if not already open. Idempotent.
-pub(crate) fn ensure_file_sink() {
+fn ensure_file_sink() {
     let mut guard = FILE_SINK.lock().unwrap_or_else(|e| e.into_inner());
     if guard.is_some() {
         return;
@@ -67,14 +67,38 @@ pub(crate) fn ensure_file_sink() {
     // create_dir_all, and OpenOptions won't create missing parents.
     let dir = crate::state::cache_data_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("console.log");
     if let Ok(file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open(dir.join("console.log"))
     {
         *guard = Some(file);
     }
+}
+
+/// Archive the previous session's `console.log`, for the process that owns the
+/// session and only for it.
+///
+/// The lock is the precondition, not decoration. Every process of this app
+/// shares one data dir, so a CEF subprocess or a duplicate launch rotating here
+/// would rename the file the surviving browser holds open, which succeeds
+/// silently on Linux and on Windows alike; the survivor would go on writing
+/// into the archive while `console.log` no longer existed. Neither of those two
+/// ever holds the lock. A subprocess returns from `execute_process` and a
+/// duplicate from the guard, both before it is taken.
+pub(crate) fn adopt_session_log(_lock: &crate::platform::app_lock::AppLock) {
+    let mut guard = FILE_SINK.lock().unwrap_or_else(|e| e.into_inner());
+    adopt_leftover(&crate::state::cache_data_dir(), &mut guard);
+}
+
+/// The half that does not need the lock to be checked, an empty slot proving
+/// this process holds no handle on the file about to be renamed. Held across the
+/// rename so a `verr!` on another thread cannot open one midway.
+fn adopt_leftover(dir: &Path, sink: &mut Option<File>) {
+    if sink.is_some() {
+        return;
+    }
+    rotate_console_log(dir);
 }
 
 #[inline]
@@ -108,24 +132,34 @@ pub fn vlog_err(args: std::fmt::Arguments<'_>) {
     print_log(args);
 }
 
-// The crate's only writer: the deny targets its callers, not the sink itself.
-#[allow(clippy::print_stderr)]
-#[inline]
-fn print_log(args: std::fmt::Arguments<'_>) {
-    let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
-    let line = format!(
-        "[{:02}:{:02}:{:02}:{:03}] {}",
+/// One timestamped line, its newline included.
+///
+/// The newline belongs to the buffer, not to the call that writes it. Several
+/// processes of this app share one `console.log`, and `O_APPEND` makes each
+/// WRITE atomic, not each line: emitting the text and the newline separately
+/// interleaved four fifths of the lines under four concurrent writers.
+fn compose_line(now: OffsetDateTime, args: std::fmt::Arguments<'_>) -> String {
+    format!(
+        "[{:02}:{:02}:{:02}:{:03}] {}\n",
         now.hour(),
         now.minute(),
         now.second(),
         now.millisecond(),
         args
-    );
-    eprintln!("{line}");
+    )
+}
+
+// The crate's only writer: the deny targets its callers, not the sink itself.
+#[allow(clippy::print_stderr)]
+#[inline]
+fn print_log(args: std::fmt::Arguments<'_>) {
+    let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+    let line = compose_line(now, args);
+    eprint!("{line}");
     // Callers gate themselves: vlog* past their level, vlog_err by opening the sink.
     let mut guard = FILE_SINK.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(file) = guard.as_mut() {
-        let _ = writeln!(file, "{line}");
+        let _ = file.write_all(line.as_bytes());
     }
 }
 
@@ -209,11 +243,15 @@ fn local_offset() -> UtcOffset {
     UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC)
 }
 
-/// At startup, archive a leftover `console.log` into `<data_dir>/logs/` named by
-/// its last-modified time, then prune to the 20 most recent. Unconditional:
-/// runs even when this session keeps logging off, never losing a leftover.
-/// `console.log` always means "this session"; `logs/` holds past sessions.
-pub(crate) fn rotate_console_log(data_dir: &Path) {
+/// Archive a leftover `console.log` into `<data_dir>/logs/` named by its
+/// last-modified time, then prune to the 20 most recent. `console.log` always
+/// means "this session"; `logs/` holds past sessions.
+///
+/// Reached only through `adopt_session_log`, which owns both preconditions: who
+/// may rotate, and that nothing here holds the file yet. Unconditional for the
+/// owning launch, archiving a leftover even when this session keeps logging
+/// off.
+fn rotate_console_log(data_dir: &Path) {
     let current = data_dir.join("console.log");
     let Ok(meta) = std::fs::metadata(&current) else {
         return; // nothing to rotate
