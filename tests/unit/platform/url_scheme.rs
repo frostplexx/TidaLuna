@@ -13,9 +13,11 @@ const NSI: &str = include_str!("../../../installer/windows/tidalunar.nsi");
 #[test]
 fn the_open_command_quotes_the_exe_and_takes_the_url_as_its_argument() {
     // Quoting is not decoration, the default install path having a space in it.
+    // The `--` is what keeps a quote inside the URL from smuggling a Chromium
+    // switch onto the line; losing it here is a silent return to that hole.
     assert_eq!(
         open_command(Path::new(r"C:\Program Files\TidaLunar\tidalunar.exe")),
-        r#""C:\Program Files\TidaLunar\tidalunar.exe" "%1""#
+        r#""C:\Program Files\TidaLunar\tidalunar.exe" -- "%1""#
     );
 }
 

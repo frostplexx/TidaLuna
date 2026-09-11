@@ -449,7 +449,7 @@ Section "Uninstall"
   ; since our last launch. The comparison fails toward leaving it: a stale key of
   ; ours costs one click, another app's registration costs it the feature.
   ReadRegStr $0 HKCU "Software\Classes\tidal\shell\open\command" ""
-  ${If} $0 == '"$INSTDIR\tidalunar.exe" "%1"'
+  ${If} $0 == '"$INSTDIR\tidalunar.exe" -- "%1"'
     DeleteRegKey HKCU "Software\Classes\tidal"
   ${EndIf}
 

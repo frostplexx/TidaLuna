@@ -281,3 +281,51 @@ fn every_delivered_route_starts_with_exactly_one_slash() {
         assert!(!delivered.starts_with("//"), "{raw} delivered {delivered}");
     }
 }
+
+/// A command line as `classify_launch` receives it, program name already skipped.
+fn line(args: &[&str]) -> Vec<String> {
+    args.iter().map(|arg| (*arg).to_owned()).collect()
+}
+
+#[test]
+fn a_launch_carrying_only_the_link_is_let_through() {
+    for args in [
+        &["tidal://album/1"][..],
+        &["--", "tidal://album/1"],
+        &["--", "TIDAL:album/1"],
+    ] {
+        assert_eq!(classify_launch(&line(args)), Launch::LinkAlone, "{args:?}");
+    }
+}
+
+#[test]
+fn a_launch_that_names_no_link_is_left_alone() {
+    // Whatever someone passes by hand is theirs.
+    assert_eq!(classify_launch(&line(&[])), Launch::NoLink);
+    assert_eq!(
+        classify_launch(&line(&["--enable-logging"])),
+        Launch::NoLink
+    );
+}
+
+#[test]
+fn a_link_beside_anything_else_is_refused() {
+    // The `--type=` line is the one that matters: keying this refusal on that
+    // switch let the same broken quote turn it off.
+    for args in [
+        &["tidal://x", "--browser-subprocess-path=evil"][..],
+        &["--", "tidal://x", "--browser-subprocess-path=evil"],
+        &[
+            "--type=renderer",
+            "tidal://x",
+            "--browser-subprocess-path=evil",
+        ],
+        &["TIDAL://x", "--browser-subprocess-path=evil"],
+    ] {
+        assert_eq!(
+            classify_launch(&line(args)),
+            Launch::LinkAndMore,
+            "{args:?}"
+        );
+    }
+}

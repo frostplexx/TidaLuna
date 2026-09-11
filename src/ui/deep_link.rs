@@ -192,6 +192,54 @@ pub(crate) fn url_from_args<I: IntoIterator<Item = OsString>>(args: I) -> Option
         .find(|arg| strip_scheme(arg.trim()).is_some())
 }
 
+/// Looser than `strip_scheme` deliberately. `tidal:album/1` carries no authority
+/// and the shell routes it here all the same, where a test keyed on `://` would
+/// leave it ungated.
+///
+/// Compiled under `test` too: the rule is platform-neutral, its refusal is not.
+#[cfg(any(target_os = "windows", test))]
+fn names_scheme(arg: &str) -> bool {
+    let Some((head, rest)) = arg.trim().split_at_checked(SCHEME.len()) else {
+        return false;
+    };
+    head.eq_ignore_ascii_case(SCHEME) && rest.starts_with(':')
+}
+
+/// The shell substitutes exactly one value for `%1`; a launch made for a link
+/// carries exactly one token. Anything past that came out of a quote inside the
+/// value, the split `open_command` describes.
+#[cfg(any(target_os = "windows", test))]
+#[derive(Debug, PartialEq)]
+pub(crate) enum Launch {
+    /// Nothing names the scheme: an ordinary start, whatever switches it carries.
+    NoLink,
+    /// Behind the `--` the handler registers, or without it.
+    LinkAlone,
+    /// A link, and tokens that were never ours to receive.
+    LinkAndMore,
+}
+
+/// Split from the launch so the rule is exercised without a process to start.
+///
+/// Keyed on the link rather than on the `--type=` switch that tells a browser
+/// process from a child: that flag answers a question the same broken quote can
+/// answer too, and a routing decision is no place to hang a refusal.
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn classify_launch(args: &[String]) -> Launch {
+    let carried = match args.split_first() {
+        Some((separator, rest)) if separator.as_str() == "--" => rest,
+        _ => args,
+    };
+    if !carried.iter().any(|arg| names_scheme(arg)) {
+        return Launch::NoLink;
+    }
+    if carried.len() == 1 {
+        Launch::LinkAlone
+    } else {
+        Launch::LinkAndMore
+    }
+}
+
 /// A validated target waiting for a window to show it. Three consumers drain it
 /// through `take_pending`, whichever runs first winning and the others finding
 /// it empty: the startup navigation, the browser's own registration, and the

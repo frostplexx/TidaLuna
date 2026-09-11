@@ -200,6 +200,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // `open_command`'s `--` sits in HKCU, where any process of this user can
+    // rewrite it, and an install that has not relaunched still carries the form
+    // without it. Windows alone: `%U` on the Linux entry is plural by spec.
+    #[cfg(target_os = "windows")]
+    {
+        let carried: Vec<String> = std::env::args_os()
+            .skip(1)
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        // Fatal rather than dropped: `initialize` below reads the same line again
+        // from the OS.
+        if ui::deep_link::classify_launch(&carried) == ui::deep_link::Launch::LinkAndMore {
+            crate::verr!("[SCHEME] launch carries more than a link; refusing to start");
+            std::process::exit(1);
+        }
+    }
+
     let renderer_config = MessageRouterConfig::default();
     let renderer_router = RendererSideRouter::new(renderer_config);
 

@@ -19,12 +19,16 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// What the shell runs for a `tidal://` click, our path quoted with the URL as its
-/// one argument. Named rather than inlined because the uninstaller compares against
-/// this exact shape to tell our key from another client's, and cannot see this
-/// function; a test holds the two together.
+/// A URL carrying a double quote breaks out of `"%1"` and appends its own tokens
+/// to the line CEF reads through `GetCommandLineW`. Past a bare `--` Chromium
+/// stops reading tokens as switches, leaving what the shell split out a positional
+/// argument rather than `--browser-subprocess-path`.
+///
+/// Named rather than inlined because the uninstaller compares against this exact
+/// shape to tell our key from another client's, and cannot see this function; a test
+/// holds the two together.
 fn open_command(exe: &Path) -> String {
-    format!("\"{}\" \"%1\"", exe.display())
+    format!("\"{}\" -- \"%1\"", exe.display())
 }
 
 /// Browser process only, like the Linux desktop entry, since CEF subprocesses
