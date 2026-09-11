@@ -6,7 +6,7 @@ use time::{Date, Month, PrimitiveDateTime, Time};
 
 static LOGGING_STATE: Mutex<()> = Mutex::new(());
 
-/// libtest runs the crate in one process, several threads wide: a test that
+/// libtest runs the crate in one process, several threads wide. A test that
 /// mutates LOG_LEVEL or FILE_SINK races its neighbours and dirties the rest of
 /// the run. Take this first; it serialises and restores.
 struct LoggingState {
@@ -57,6 +57,22 @@ fn hard_failures_write_at_level_zero_while_gated_logs_do_not() {
     assert!(
         !written.contains("gated-line-marker"),
         "a gated log must stay silent at level 0"
+    );
+}
+
+#[test]
+fn a_composed_line_carries_its_own_newline() {
+    // The newline has to leave in the same write as the text; `compose_line`
+    // documents the shared-`console.log` reason.
+    let dt = PrimitiveDateTime::new(
+        Date::from_calendar_date(2026, Month::June, 7).unwrap(),
+        Time::from_hms_milli(14, 30, 5, 42).unwrap(),
+    )
+    .assume_utc();
+
+    assert_eq!(
+        compose_line(dt, format_args!("hello {}", 1)),
+        "[14:30:05:042] hello 1\n"
     );
 }
 
@@ -148,6 +164,64 @@ fn rotate_is_noop_without_leftover() {
     let dir = tempfile::tempdir().unwrap();
     rotate_console_log(dir.path()); // must not panic / must not create logs/
     assert!(!dir.path().join("logs").exists());
+}
+
+/// The one `console-*.log` under `<dir>/logs`, or a panic naming what was there.
+fn sole_archive(dir: &Path) -> std::path::PathBuf {
+    let mut found: Vec<_> = fs::read_dir(dir.join("logs"))
+        .unwrap_or_else(|e| panic!("no logs dir: {e}"))
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("console-") && n.ends_with(".log"))
+        })
+        .collect();
+    found.sort();
+    assert_eq!(
+        found.len(),
+        1,
+        "expected exactly one archive, got {found:?}"
+    );
+    found.remove(0)
+}
+
+#[test]
+fn an_empty_slot_lets_the_leftover_be_archived() {
+    // Pins that the empty-slot path really reaches the rotation, a gutted
+    // `adopt_leftover` still satisfying the filled-slot test below.
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("console.log"), b"previous session\n").unwrap();
+
+    let mut sink = None;
+    adopt_leftover(dir.path(), &mut sink);
+
+    assert!(!dir.path().join("console.log").exists());
+    assert_eq!(
+        fs::read_to_string(sole_archive(dir.path())).unwrap(),
+        "previous session\n"
+    );
+}
+
+#[test]
+fn a_slot_that_already_holds_a_handle_rotates_nothing() {
+    // Renaming a `console.log` this process is holding succeeds silently on both
+    // platforms, and the session would then write into the archive while the
+    // path no longer existed. An empty slot is what rules that out.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("console.log");
+    fs::write(&path, b"live session\n").unwrap();
+    let open = fs::OpenOptions::new().append(true).open(&path).unwrap();
+
+    let mut sink = Some(open);
+    adopt_leftover(dir.path(), &mut sink);
+
+    assert!(
+        !dir.path().join("logs").exists(),
+        "a filled slot must not rotate the file it is already writing to"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "live session\n");
 }
 
 #[test]

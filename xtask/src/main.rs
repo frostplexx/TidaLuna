@@ -691,6 +691,25 @@ fn write_info_plist(
         "\n    <key>CFBundleIconFile</key>\n    <string>tidaluna.icns</string>"
     };
 
+    // Only the main bundle claims the scheme. A helper declaring it too would
+    // give Launch Services five candidates for one click.
+    let url_types = if is_helper {
+        ""
+    } else {
+        r#"
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.tidalunar.tidal</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tidal</string>
+            </array>
+        </dict>
+    </array>"#
+    };
+
     let plist = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -713,7 +732,7 @@ fn write_info_plist(
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
-    <true/>{ui_element}{icon_file}
+    <true/>{ui_element}{icon_file}{url_types}
 </dict>
 </plist>
 "#

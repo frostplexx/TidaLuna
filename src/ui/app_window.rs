@@ -28,6 +28,26 @@ impl AppWindow {
         None
     }
 
+    /// Bring the running window forward, wherever the request came from: a
+    /// duplicate launch, a deep link, the relaunch CEF reports itself, or the
+    /// tray icon. `show` answers for a window hidden to the tray, `activate` for
+    /// one that sits behind another application.
+    ///
+    /// `restore` is asked of a minimized window only. It is not idle otherwise.
+    /// On all three platforms it also un-maximizes, and the copies that called it
+    /// unguarded took a maximized window away on every raise. That loss outlived
+    /// the session, `on_window_bounds_changed` persisting the smaller bounds half
+    /// a second later.
+    pub(crate) fn raise_current() {
+        if let Some(window) = Self::current() {
+            if window.is_minimized() {
+                window.restore();
+            }
+            window.show();
+            window.activate();
+        }
+    }
+
     pub(crate) fn close(&self) {
         self.cef.close();
     }
@@ -81,6 +101,13 @@ impl AppWindow {
         self.cef.is_maximized() == 1
     }
 
+    /// Reads the OS rather than a remembered state, `IsIconic` on Windows, so it
+    /// answers for a window minimized by any route, including the raw
+    /// `WM_SYSCOMMAND` this file posts.
+    pub(crate) fn is_minimized(&self) -> bool {
+        self.cef.is_minimized() == 1
+    }
+
     pub(crate) fn show(&self) {
         self.cef.show();
     }
@@ -89,16 +116,16 @@ impl AppWindow {
         self.cef.hide();
     }
 
-    pub(crate) fn focus_foreground(&self) {
-        #[cfg(target_os = "windows")]
-        {
-            let hwnd = self.cef.window_handle().0 as windows_sys::Win32::Foundation::HWND;
-            if !hwnd.is_null() {
-                unsafe {
-                    windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
-                }
-            }
-        }
+    /// Ask the platform to hand this window the foreground.
+    ///
+    /// On Windows this reaches the same `SetForegroundWindow` a hand-rolled call
+    /// made, after a Z-order bump it did not do. On X11 it sends the EWMH
+    /// `_NET_ACTIVE_WINDOW` message, which is the only thing a background app may
+    /// use to ask, and which the hand-rolled path left undone entirely. On macOS
+    /// `show` has already activated the app. CEF skips the work when the window
+    /// holds the foreground already.
+    pub(crate) fn activate(&self) {
+        self.cef.activate();
     }
 
     pub(crate) fn client_area_bounds_in_screen(&self) -> Rect {

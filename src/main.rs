@@ -200,6 +200,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // `open_command`'s `--` sits in HKCU, where any process of this user can
+    // rewrite it, and an install that has not relaunched still carries the form
+    // without it. Windows alone: `%U` on the Linux entry is plural by spec.
+    #[cfg(target_os = "windows")]
+    {
+        let carried: Vec<String> = std::env::args_os()
+            .skip(1)
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        // Fatal rather than dropped: `initialize` below reads the same line again
+        // from the OS.
+        if ui::deep_link::classify_launch(&carried) == ui::deep_link::Launch::LinkAndMore {
+            crate::verr!("[SCHEME] launch carries more than a link; refusing to start");
+            std::process::exit(1);
+        }
+    }
+
     let renderer_config = MessageRouterConfig::default();
     let renderer_router = RendererSideRouter::new(renderer_config);
 
@@ -213,25 +230,71 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(ret);
     }
 
+    // An OS handler launch carries the clicked URL here. Read before the guard,
+    // since a duplicate launch has to hand it over on its way out and the
+    // surviving one has to keep it for the window it is about to build.
+    let launch_url = ui::deep_link::url_from_args(std::env::args_os().skip(1));
+
     // Single-instance guard, before any DB/SDK/Connect/CEF work: a duplicate would
     // otherwise race (and could purge) the running instance's SDK store. It signals
     // the running window to focus, then exits.
-    let _app_lock = match platform::app_lock::acquire_or_signal() {
+    let app_lock = match platform::app_lock::acquire_or_signal(launch_url.as_deref()) {
         Some(lock) => lock,
         None => return Ok(()),
     };
 
-    // Past the subprocess early-exit and the instance lock: only the surviving
-    // browser process may touch the desktop entry.
+    // Owning the lock is what makes rotating the shared log ours to do, and this
+    // is the first point where that is known. Before the level is applied below,
+    // since applying it opens the sink.
+    crate::logging::adopt_session_log(&app_lock);
+
+    // After that rotation, never before, because this one speaks through `verr!`,
+    // which opens the very file the line above moves.
+    app_lock.report_link_channel();
+
+    // Ahead of everything that logs: the persisted level lives in the DB, and a
+    // gated line emitted before it is known reaches neither stderr nor the file,
+    // making it not late output but no output. Nothing here needs the tokio
+    // runtime, and the guard above is the only order this region enforces.
+    let data_dir = state::cache_data_dir();
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        crate::vprintln!("[DB] Failed to create data dir {}: {e}", data_dir.display());
+    }
+    let db_actor = db::DbActor::open(&data_dir).expect("Failed to open databases");
+    let _ = state::DB.set(db_actor);
+
+    // Load the bootstrap settings snapshot once, off the CEF UI thread, as the
+    // single source of truth: used here for the early log level + Windows console
+    // decision, and later for the init-script globals. Browser-only here, no
+    // --type= guard needed. The env path opens the console first; only attach
+    // when it didn't (no double-alloc).
+    let boot = crate::state::db().call_settings(crate::settings::load_boot_settings);
+    let _ = crate::state::BOOT_SETTINGS.set(boot);
+    crate::logging::set_log_level(boot.log_level);
+    #[cfg(target_os = "windows")]
+    if boot.console && crate::logging::log_level() >= 1 && crate::logging::env_log_level() < 1 {
+        attach_or_alloc_console();
+    }
+
+    // Validated and held; the startup navigation drains it in place of the home page.
+    if let Some(raw) = &launch_url {
+        ui::deep_link::deliver(raw);
+    }
+
+    // Past the subprocess early-exit and the instance lock, only the surviving
+    // browser process may touch the desktop entry or the scheme registration.
     #[cfg(target_os = "linux")]
     platform::desktop_entry::install();
-
-    // Open the sink early (and rotate last session's log) to capture early
-    // lines; safe before DB init since cache_data_dir() is env-only.
-    crate::logging::rotate_console_log(&crate::state::cache_data_dir());
-    if crate::logging::log_level() >= 1 {
-        crate::logging::ensure_file_sink();
-    }
+    // Separate call because `install` returns early for a managed or packaged
+    // install; those ship the entry, and the scheme still needs claiming.
+    #[cfg(target_os = "linux")]
+    platform::desktop_entry::claim_scheme_default();
+    #[cfg(target_os = "windows")]
+    platform::url_scheme::register();
+    // Before CEF starts its loop, a link clicked while the app is booting is
+    // dispatched as soon as the handler exists, and there is none before this.
+    #[cfg(target_os = "macos")]
+    platform::url_event::install();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -261,28 +324,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         crate::vprintln!("[CACHE]  Warm thread spawn failed ({e})");
     }
 
-    let data_dir = state::cache_data_dir();
-    if let Err(e) = std::fs::create_dir_all(&data_dir) {
-        crate::vprintln!("[DB] Failed to create data dir {}: {e}", data_dir.display());
-    }
-    let db_actor = db::DbActor::open(&data_dir).expect("Failed to open databases");
-    let _ = state::DB.set(db_actor);
-
-    // Load the bootstrap settings snapshot once, off the CEF UI thread, as the
-    // single source of truth: used here for the early log level + Windows console
-    // decision, and later for the init-script globals. Browser-only here, no
-    // --type= guard needed. The env path opens the console first; only attach
-    // when it didn't (no double-alloc).
-    let boot = crate::state::db().call_settings(crate::settings::load_boot_settings);
-    let _ = crate::state::BOOT_SETTINGS.set(boot);
-    crate::logging::set_log_level(boot.log_level);
-    #[cfg(target_os = "windows")]
-    if boot.console && crate::logging::log_level() >= 1 && crate::logging::env_log_level() < 1 {
-        attach_or_alloc_console();
-    }
-
-    // After set_log_level: captured whether logging came from the LOGS env or
-    // the in-app setting.
     crate::vprintln!("[INIT]   TidaLunar v{}", env!("CARGO_PKG_VERSION"));
     crate::vprintln!("[INIT]   Chromium {}", state::chromium_version());
     // Guarded, not just logged: asking Bun its version spawns it, and `vprintln!`

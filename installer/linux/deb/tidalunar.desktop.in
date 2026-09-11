@@ -8,3 +8,4 @@ Type=Application
 Icon=tidalunar
 StartupWMClass=tidalunar
 Categories=AudioVideo;Audio;Music;
+MimeType=x-scheme-handler/tidal;

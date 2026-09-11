@@ -14,6 +14,10 @@ pub(crate) mod secure_store;
 #[cfg(target_os = "windows")]
 pub(crate) mod thumbbar;
 pub(crate) mod tray;
+#[cfg(target_os = "macos")]
+pub(crate) mod url_event;
+#[cfg(target_os = "windows")]
+pub(crate) mod url_scheme;
 #[cfg(target_os = "windows")]
 pub(crate) mod volume_sync;
 #[cfg(target_os = "linux")]

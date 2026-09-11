@@ -84,3 +84,82 @@ fn token_body_empties_on_entropy_failure_never_leaks() {
     assert_eq!(out, "{}");
     assert!(!out.contains("real-secret"));
 }
+
+fn headers(content_type: &str) -> serde_json::Map<String, serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    if !content_type.is_empty() {
+        map.insert(
+            "content-type".to_string(),
+            serde_json::Value::String(content_type.to_string()),
+        );
+    }
+    map
+}
+
+fn album_with_video_cover() -> String {
+    serde_json::json!({
+        "data": {
+            "type": "albums",
+            "id": "1",
+            "relationships": {
+                "coverArt": {
+                    "data": [
+                        { "type": "artworks", "id": "vid-1" },
+                        { "type": "artworks", "id": "img-1" }
+                    ]
+                }
+            }
+        },
+        "included": [
+            { "type": "artworks", "id": "vid-1", "attributes": { "mediaType": "VIDEO" } },
+            { "type": "artworks", "id": "img-1", "attributes": { "mediaType": "IMAGE" } }
+        ]
+    })
+    .to_string()
+}
+
+#[test]
+fn artwork_strip_applies_to_openapi_json_replies() {
+    let openapi = crate::ui::nav::RequestUrl::new("https://openapi.tidal.com/v2/albums/1".into());
+    assert!(strips_artwork(
+        &openapi,
+        &headers("application/vnd.api+json")
+    ));
+
+    // A reply with no content-type is left alone rather than guessed at.
+    assert!(!strips_artwork(&openapi, &headers("")));
+    assert!(!strips_artwork(&openapi, &headers("text/html")));
+
+    let legacy = crate::ui::nav::RequestUrl::new("https://api.tidal.com/v1/albums/1".into());
+    assert!(!strips_artwork(&legacy, &headers("application/json")));
+}
+
+#[test]
+fn upstream_body_drops_the_video_artwork() {
+    // The proxy reply never reaches the CEF response filter. The same rule has to land
+    // here: an album fetched through the fallback must lose its video cover too.
+    let stripped = UpstreamBody(album_with_video_cover()).strip_video_artwork();
+    let doc: serde_json::Value = serde_json::from_str(&stripped.0).expect("valid JSON out");
+
+    let included = doc["included"].as_array().expect("included survives");
+    assert_eq!(included.len(), 1);
+    assert_eq!(included[0]["id"], "img-1");
+
+    let ids = doc["data"]["relationships"]["coverArt"]["data"]
+        .as_array()
+        .expect("the relationship survives");
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids[0]["id"], "img-1");
+}
+
+#[test]
+fn upstream_body_without_video_artwork_is_returned_verbatim() {
+    let body = r#"{"data":{"type":"albums","id":"1"}}"#.to_string();
+    assert_eq!(UpstreamBody(body.clone()).strip_video_artwork().0, body);
+}
+
+#[test]
+fn upstream_body_that_is_not_json_is_returned_verbatim() {
+    let body = "<html>not json</html>".to_string();
+    assert_eq!(UpstreamBody(body.clone()).strip_video_artwork().0, body);
+}

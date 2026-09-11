@@ -500,35 +500,6 @@ fn matching_rates_skip_the_resampler_and_pass_samples_through() {
     assert!(pipe.flush().unwrap().is_empty(), "nothing was held back");
 }
 
-/// Not a pass/fail test: a stopwatch, run by hand. The engine-rate change makes the
-/// resampler run continuously instead of almost never, and the design was approved on
-/// an estimate of 2-5% of one core. This measures it here rather than trusting that.
-///
-/// Run with: cargo test resampling_cost -- --ignored --nocapture
-#[test]
-#[ignore = "measurement, not an assertion: run by hand with --nocapture"]
-#[allow(clippy::print_stdout)]
-fn resampling_cost_for_one_minute_of_audio() {
-    // One minute of stereo audio, fed a chunk at a time the way the decode thread does.
-    const SECONDS: usize = 60;
-    for (src, out) in [(44_100u32, 192_000u32), (96_000, 44_100), (44_100, 48_000)] {
-        let mut pipe = AudioPipeline::new(src, out, 2, 2).expect("pipeline");
-        let chunk = sine(TONE_HZ, src, CHUNK_SIZE, 2);
-        let chunks = (src as usize * SECONDS) / CHUNK_SIZE;
-
-        let start = std::time::Instant::now();
-        for _ in 0..chunks {
-            pipe.process(&chunk).expect("process");
-        }
-        let elapsed = start.elapsed().as_secs_f64();
-
-        println!(
-            "{src} -> {out}: {elapsed:.3}s of CPU for {SECONDS}s of audio = {:.2}% of one core",
-            elapsed / SECONDS as f64 * 100.0
-        );
-    }
-}
-
 /// The order the stream is opened in decides who resamples. On Windows shared mode and
 /// on macOS the device's default IS the rate the audio server runs at; targeting it
 /// leaves the server nothing to convert. On Linux cpal cannot learn PipeWire's real

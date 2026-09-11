@@ -282,8 +282,9 @@ wrap_browser_process_handler! {
     }
     impl BrowserProcessHandler {
         fn on_context_initialized(&self) {
-            // CEF is up: the single-instance focus listener may now post UI tasks.
-            crate::platform::app_lock::mark_context_ready();
+            // CEF is up; the single-instance focus listener and a deep link may
+            // now post UI tasks.
+            crate::app_state::mark_context_ready();
 
             if let Some(ctx) = cef::request_context_get_global_context() {
                 let prefs = [
@@ -481,7 +482,13 @@ document.title = "TidaLunar - A TIDAL client";
                 background_color: 0xFF111111,
                 ..Default::default()
             };
-            let url = CefString::from(format!("https://{}/", crate::ui::nav::HOST_DESKTOP).as_str());
+            // A launch that carried a deep link opens on it; the window is built
+            // once, and seeding the first navigation beats loading the home page
+            // and replacing it a moment later.
+            let start = crate::ui::deep_link::take_pending()
+                .map(|target| target.to_string())
+                .unwrap_or_else(|| format!("https://{}/", crate::ui::nav::HOST_DESKTOP));
+            let url = CefString::from(start.as_str());
 
             let mut client_ref = self.default_client();
             let mut bv_delegate = TidalBrowserViewDelegate::new(0);
@@ -520,11 +527,7 @@ document.title = "TidaLunar - A TIDAL client";
             _command_line: Option<&mut CommandLine>,
             _current_directory: Option<&CefString>,
         ) -> i32 {
-            if let Some(window) = crate::ui::app_window::AppWindow::current() {
-                window.restore();
-                window.show();
-                window.focus_foreground();
-            }
+            crate::ui::app_window::AppWindow::raise_current();
             1
         }
     }

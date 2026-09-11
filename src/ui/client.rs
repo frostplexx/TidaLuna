@@ -423,6 +423,10 @@ wrap_life_span_handler! {
                     with_state(|state| {
                         state.browser = Some(browser);
                     });
+                    // A deep link that arrived while this was being built waits
+                    // for exactly this moment; nothing later would drain it.
+                    // After the store, which is where the frame is looked up.
+                    crate::ui::deep_link::apply_pending();
                 }
             }
         }
@@ -775,7 +779,10 @@ wrap_request_handler! {
             // Strip the CSP meta on the doc navigation (first load, no SW yet);
             // the browser handler wins over the context one; peel it off here.
             // TokenResourceHandler is a no-op on the doc GET: nothing is lost.
-            if crate::ui::csp_filter::is_document_url(&url) {
+            if crate::ui::csp_filter::is_document_url(
+                &url,
+                _request.as_ref().map(|r| r.resource_type()),
+            ) {
                 return Some(crate::ui::csp_filter::DocumentHandler::new());
             }
 
@@ -809,6 +816,7 @@ wrap_request_handler! {
                     std::sync::Arc::new(std::sync::Mutex::new(None)),
                     std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 ))
             } else if !crate::ui::nav::is_tidal_origin(&url) {
                 // Exfiltration guard: block sendBeacon to non-Tidal domains.
