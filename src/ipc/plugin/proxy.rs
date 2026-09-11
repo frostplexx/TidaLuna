@@ -196,11 +196,9 @@ async fn handle_proxy_head(query_id: i64, url: crate::ui::nav::RequestUrl) {
     }
 }
 
-/// A response body as it came off the wire. An upstream error page can reflect a real OAuth
-/// token back at us, hence no accessor for the raw string: `scrubbed_for_log` and
-/// `into_reply` are the only exits and both run the token scrub.
-/// The mime lives in the upstream headers here rather than on a CEF response. The reading
-/// is the handler's; the rule it feeds is the one the response filter uses.
+/// Whether a reply this path answers carries artwork we rewrite. The mime lives in the
+/// upstream headers here rather than on a CEF response. The reading is the handler's;
+/// the rule it feeds is the one the response filter uses.
 fn strips_artwork(
     url: &crate::ui::nav::RequestUrl,
     headers: &serde_json::Map<String, serde_json::Value>,
@@ -211,6 +209,9 @@ fn strips_artwork(
         .is_some_and(|mime| crate::ui::artwork_filter::should_strip(url, mime))
 }
 
+/// A response body as it came off the wire. An upstream error page can reflect a real OAuth
+/// token back at us, hence no accessor for the raw string: `scrubbed_for_log` and
+/// `into_reply` are the only exits and both run the token scrub.
 struct UpstreamBody(String);
 
 impl UpstreamBody {
