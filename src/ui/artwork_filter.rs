@@ -26,10 +26,16 @@ pub(crate) fn serves_artworks(url: &RequestUrl) -> bool {
         .is_some_and(|parsed| parsed.scheme() == "https" && parsed.host_str() == Some(HOST_OPENAPI))
 }
 
-/// The mime guard keeps the buffering filter off everything on the host that is
-/// not a JSON document.
+/// Keeps the buffering filter off everything on the host that is not a JSON
+/// document. Its own half of the rule, because the two are asked at different
+/// moments. The CEF path knows the host before the response exists and the mime
+/// only once it does.
+pub(crate) fn carries_json(mime: &str) -> bool {
+    mime.contains("json")
+}
+
 pub(crate) fn should_strip(url: &RequestUrl, mime: &str) -> bool {
-    mime.contains("json") && serves_artworks(url)
+    carries_json(mime) && serves_artworks(url)
 }
 
 pub(crate) enum StripResult {

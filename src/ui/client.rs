@@ -812,6 +812,7 @@ wrap_request_handler! {
                     std::sync::Arc::new(std::sync::Mutex::new(None)),
                     std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 ))
             } else if !crate::ui::nav::is_tidal_origin(&url) {
                 // Exfiltration guard: block sendBeacon to non-Tidal domains.

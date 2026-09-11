@@ -107,6 +107,10 @@ wrap_resource_request_handler! {
         // carried to the response. This path has no Rust await to capture across (CEF
         // drives it), and the request slot IS the capture point.
         exchange_epoch: Arc<AtomicU64>,
+        // Current hop targets the gateway that answers with artwork; set on the same
+        // entry that refuses compression for it. Carried rather than re-derived. The
+        // response half would otherwise reparse a URL for every response the app makes.
+        artwork_host: Arc<AtomicBool>,
     }
 
     impl ResourceRequestHandler {
@@ -140,7 +144,17 @@ wrap_resource_request_handler! {
                 // Asked per request rather than per response: the artwork strip
                 // reads plaintext, and compression has to be refused while the
                 // mime type that gates the strip itself is still unknown.
-                if crate::ui::artwork_filter::serves_artworks(&url) {
+                //
+                // The whole host pays for it, and that breadth is forced rather
+                // than lazy. CEF documents the response as unmodifiable in both
+                // callbacks that see one, leaving a filter unable to decompress
+                // and then say so; plaintext on the wire is the only way to read
+                // a body we mean to rewrite. Narrowing by `include` was measured and does
+                // not help: 226 of the gateway's 242 read endpoints declare it.
+                // Recorded so the next reader does not re-run that search.
+                let artwork_host = crate::ui::artwork_filter::serves_artworks(&url);
+                self.artwork_host.store(artwork_host, Ordering::Release);
+                if artwork_host {
                     force_identity_encoding(req);
                 }
 
@@ -181,17 +195,16 @@ wrap_resource_request_handler! {
                 ));
             }
 
+            // One atomic load for every response the app makes; the string below
+            // is built only for the handful this gateway answers.
+            if !self.artwork_host.load(Ordering::Acquire) {
+                return None;
+            }
             let mime = response
                 .as_ref()
                 .map(|r| userfree_to_string(&r.mime_type()))
                 .unwrap_or_default();
-            let url = RequestUrl::new(
-                request
-                    .as_ref()
-                    .map(|r| userfree_to_string(&r.url()))
-                    .unwrap_or_default(),
-            );
-            if !crate::ui::artwork_filter::should_strip(&url, &mime) {
+            if !crate::ui::artwork_filter::carries_json(&mime) {
                 return None;
             }
             // An album document is kilobytes; a paged collection carrying its
