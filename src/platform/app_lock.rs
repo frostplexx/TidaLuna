@@ -6,26 +6,16 @@
 //! uses a SID-scoped named mutex + auto-reset event; Linux an abstract AF_UNIX
 //! datagram socket (bind = lock, datagram = signal).
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 // Reaches only the focus-signal path, which exists on the platforms that have a
 // guard to signal from.
 #[cfg(any(windows, target_os = "linux"))]
 use cef::*;
 
-/// Gates `post_focus` until the CEF UI thread exists.
-static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
-
-/// Let the focus listener post UI tasks; called once CEF is initialized.
-pub(crate) fn mark_context_ready() {
-    CONTEXT_READY.store(true, Ordering::Release);
-}
-
 /// Raise the main window from any thread (posts to the CEF UI thread). No-op
 /// until CEF is up.
 #[cfg(any(windows, target_os = "linux"))]
 fn post_focus() {
-    if !CONTEXT_READY.load(Ordering::Acquire) {
+    if !crate::app_state::context_ready() {
         return;
     }
     let mut task = FocusWindowTask::new(0);
@@ -39,11 +29,7 @@ wrap_task! {
     }
     impl Task {
         fn execute(&self) {
-            if let Some(window) = crate::ui::app_window::AppWindow::current() {
-                window.restore();
-                window.show();
-                window.focus_foreground();
-            }
+            crate::ui::app_window::AppWindow::raise_current();
         }
     }
 }

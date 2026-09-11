@@ -173,10 +173,7 @@ pub(crate) fn has_tray() -> bool {
 }
 
 fn show_window() {
-    if let Some(window) = crate::ui::app_window::AppWindow::current() {
-        window.show();
-        window.focus_foreground();
-    }
+    crate::ui::app_window::AppWindow::raise_current();
 }
 
 fn force_quit() {

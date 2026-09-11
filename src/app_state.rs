@@ -1,6 +1,7 @@
 use cef::*;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub(crate) type IpcCallback = Arc<Mutex<dyn cef::wrapper::message_router::BrowserSideCallback>>;
@@ -194,6 +195,24 @@ impl AppState {
 unsafe impl Send for AppState {}
 
 pub(crate) static APP_STATE: std::sync::OnceLock<Arc<Mutex<AppState>>> = std::sync::OnceLock::new();
+
+/// Whether CEF's UI thread exists, letting a task posted to it still be taken.
+///
+/// Posting earlier is safe on its own. CEF finds no task runner and answers
+/// false. It also logs a warning no embedder can configure, and CEF's own
+/// internals skip that path for exactly that reason; the two callers an OS
+/// event can reach before CEF is up ask here first. Every other `post_task` in
+/// the tree sits inside a callback that already proves CEF runs.
+static CONTEXT_READY: AtomicBool = AtomicBool::new(false);
+
+/// Called once, from `on_context_initialized`.
+pub(crate) fn mark_context_ready() {
+    CONTEXT_READY.store(true, Ordering::Release);
+}
+
+pub(crate) fn context_ready() -> bool {
+    CONTEXT_READY.load(Ordering::Acquire)
+}
 
 pub(crate) fn with_state<F, R>(f: F) -> Option<R>
 where

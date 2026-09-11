@@ -282,8 +282,9 @@ wrap_browser_process_handler! {
     }
     impl BrowserProcessHandler {
         fn on_context_initialized(&self) {
-            // CEF is up: the single-instance focus listener may now post UI tasks.
-            crate::platform::app_lock::mark_context_ready();
+            // CEF is up; the single-instance focus listener and a deep link may
+            // now post UI tasks.
+            crate::app_state::mark_context_ready();
 
             if let Some(ctx) = cef::request_context_get_global_context() {
                 let prefs = [
@@ -520,11 +521,7 @@ document.title = "TidaLunar - A TIDAL client";
             _command_line: Option<&mut CommandLine>,
             _current_directory: Option<&CefString>,
         ) -> i32 {
-            if let Some(window) = crate::ui::app_window::AppWindow::current() {
-                window.restore();
-                window.show();
-                window.focus_foreground();
-            }
+            crate::ui::app_window::AppWindow::raise_current();
             1
         }
     }
